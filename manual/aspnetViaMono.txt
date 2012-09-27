@@ -1,0 +1,99 @@
+XSP server is a sample server that hosts the ASP.NET runtime in a
+minimalistic HTTP server
+
+Usage is:
+
+    xsp.exe [...]
+
+    --port N: n is the tcp port to listen on.
+                    Default value: 8080
+                    AppSettings key name: MonoServerPort
+    --random-port: listen on a randomly assigned port. The port numer
+                    will be reported to the caller via a text file.
+
+    --address addr: addr is the ip address to listen on.
+                    Default value: 0.0.0.0
+                    AppSettings key name: MonoServerAddress
+
+    --minThreads N:    the minimum number of threads the thread pool creates on startup.
+                       Increase this value to handle a sudden inflow of connections.
+                       Default value: (runtime default)
+    --backlog N:    the listen backlog. Default value: 500
+    --https:        enable SSL for the server
+                    Default value: false.
+                    AppSettings key name: 
+
+    --https-client-accept: enable SSL for the server with optional client certificates
+                    Default value: false (non-ssl).
+                    AppSettings key name: 
+
+    --https-client-require: enable SSL for the server with mandatory client certificates
+                    Default value: false (non-ssl).
+                    AppSettings key name: 
+
+    --cert FILENAME: path to X.509 certificate file (cer)
+                    AppSettings key name: 
+
+    --pkfile FILENAME: path to private key file (pvk)
+                    AppSettings key name: 
+
+    --p12file FILENAME: path to a PKCS#12 file containing the certificate and the private
+                    AppSettings key name: 
+
+    --pkpwd PASSWORD: password to decrypt the private key
+                    AppSettings key name: 
+
+    --protocol:     specify which protocols are available for SSL
+                    Possible values: Default, Tls, Ssl2, Ssl3
+                    Default value: Default (all)
+                    AppSettings key name: 
+
+    --root rootdir: the server changes to this directory before
+                    anything else.
+                    Default value: current directory.
+                    AppSettings key name: MonoServerRootDir
+
+    --appconfigfile FILENAME: adds application definitions from the XML
+                    configuration file. See sample configuration file that
+                    comes with the server.
+                    AppSettings key name: MonoApplicationsConfigFile
+
+    --appconfigdir DIR: adds application definitions from all XML files
+                    found in the specified directory DIR. Files must have
+                    '.webapp' extension
+                    AppSettings key name: MonoApplicationsConfigDir
+
+    --applications APPS:
+                    a comma separated list of virtual directory and
+                    real directory for all the applications we want to manage
+                    with this server. The virtual and real dirs. are separated
+                    by a colon. Optionally you may specify virtual host name
+                    and a port.
+
+                           [[hostname:]port:]VPath:realpath,...
+
+                    Samples: /:.
+                           the virtual / is mapped to the current directory.
+
+                            /blog:../myblog
+                           the virtual /blog is mapped to ../myblog
+
+                            myhost.someprovider.net:/blog:../myblog
+                           the virtual /blog at myhost.someprovider.net is mapped to ../myblog
+
+                            /:.,/blog:../myblog
+                           Two applications like the above ones are handled.
+                    Default value: /:.
+                    AppSettings key name: MonoApplications
+
+    --nonstop: don't stop the server by pressing enter. Must be used
+               when the server has no controlling terminal.
+
+    --no-hidden: allow access to hidden files (see 'man xsp' for details)
+
+    --quiet: disables the initial start up information
+
+    --version: displays version information and exits.
+    --verbose: prints extra messages. Mainly useful for debugging.
+    --pidfile file: write the process PID to the specified file.
+
