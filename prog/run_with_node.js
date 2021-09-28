@@ -131,9 +131,15 @@ async function asyncFunction() {
         var cursor = await teradataConnection.cursor();
         cursor.execute(teradataDbSchemaQueryTables);
         console.log('execute sent to TD cursor');
-        const tdTablesMatchingTableList = cursor.fetchall();
+        const tdTablesMatchingTableList = cursor.fetchmany(9);
 
         console.log('results:', tdTablesMatchingTableList.length);
+        if (tdTablesMatchingTableList.length < 10) {
+            console.log('less than 10 results:\n');
+            tdTablesMatchingTableList.forEach(function(item) {
+                console.log('item:', item); // null returned for ColumnFormat in TD, use SF to drive column-selection logic, then identify equivalent in TD
+            });
+        }
         cursor.close();
         //console.log("teradata RESULTS:\n\n-----------\n", tdTablesMatchingTableList); //[ {val: 1}, meta: ... ]
 
