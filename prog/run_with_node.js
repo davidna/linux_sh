@@ -91,7 +91,7 @@ async function asyncFunction() {
     try {
         //read the file
         let table_names = (await fs.readFile("./resources/table_list_DE877.csv", "utf-8")).split(/\r?\n/).slice(1);
-        console.log('table_names:', table_names);
+        // console.log('table_names:', table_names);
 
         // connMariaDb = await pool.getConnection();
 
@@ -118,11 +118,11 @@ async function asyncFunction() {
             }
         }
 
-        let teradataDbSchemaQueryTables = "SELECT * FROM DBC.TABLES WHERE tableName IN (" + tableSQL + ");";
+        let teradataDbSchemaQueryTables = "SELECT DatabaseName, TableName, ColumnName, ColumnFormat FROM DBC.ColumnsV WHERE tableName IN (" + tableSQL + ")";
 
         let dataTypesToSample = ['char', 'number', 'date', 'timestamp_ntz'];
 
-        console.log('\n\n-----------\nquery including all tables from list:', teradataDbSchemaQueryTables);
+        // console.log('\n\n-----------\nquery including all tables from list:', teradataDbSchemaQueryTables);
 
         console.log('running query\n\n-----------\n');
 
@@ -136,6 +136,7 @@ async function asyncFunction() {
         console.log('results:', tdTablesMatchingTableList.length);
         cursor.close();
         //console.log("teradata RESULTS:\n\n-----------\n", tdTablesMatchingTableList); //[ {val: 1}, meta: ... ]
+
 
 
     } catch (err) {
