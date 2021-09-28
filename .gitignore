@@ -1,2 +1,4 @@
 node_modules/
-
+teradata/index.js
+mariadb/index.js
+snowflake/index.js
