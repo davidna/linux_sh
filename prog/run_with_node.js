@@ -1,133 +1,96 @@
-const mariadb = require('mariadb');
-const TeradataConnection = require("teradata-nodejs-driver/teradata-connection");
-const SnowflakeSDK = require("snowflake-sdk");
-const fs = require("fs").promises;
-const _ = require("underscore");
-
 const { getSystemErrorMap } = require('util');
-// initialized
 
-var options = {
-    source1: {
+const mariadb = require('mariadb');
+const fs = require("fs").promises;
+const fs2 = require('fs');
+const csv = require('csv-parser');
 
-    },
-    source2: {
-
-    },
-    source3: {
-
-    },
-    TeradataDbConnectionConfigurations: require("./teradata/"),
-    mariaDbConnectionConfigurations: require('./mariadb/'),
-    snowflakeDbConnectionConfigurations: {
-        account: "SKECHERS",
-        username: "svc_erwin",
-        password: "0^ag5L6C$0W2V1x28tOm9"
-    },
-    // DeltaLakeBronzeDbConnectionConfigurations: {
-
-    // }
-    // ,
-    // AproPOSDbConnectionConfigurations: {
-
-    // },
-    // CompassDbConnectionConfiguration: {
-
-    // }
-}
-
-let workerFunctions = {
-    welcome: function(inputOptions, dbName) {
-        // console.log('', inputOptions);
-
-        //need custom logic, when more than 1
-        var outputOptions = {
-            source1: options.mariaDbConnectionConfigurations,
-            source2: options.TeradataDbConnectionConfigurations
-        }
-
-        let outputConnectionPool;
-
-        // console.log("dbName:", dbName);
-        switch (dbName) {
-            case "mariaDb":
-                outputConnectionPool = mariadb.createPool(outputOptions.source1);
-                break;
-            case "teradataDb":
-                outputConnectionPool = new TeradataConnection.TeradataConnection();
-                outputConnectionPool.connect(outputOptions.source2);
-                console.log("Connect Success");
-                break;
-            case "snowflakeDb":
-                outputConnectionPool = new SnowflakeSDK.createConnection(inputOptions);
-                break;
-        }
-
-        // console.log("outputConnectionPool:", outputConnectionPool);
-        if (!outputConnectionPool) throw new Error('\n\n\nempty OutputConnectionPool - dbName:', dbName);
-
-        return outputConnectionPool;
-    },
-    solveTheProblem() {
-        console.log('주영아, 사랑해~~~');
-        console.log('args:', args);
-        return "problem not solved yet";
-    },
-    shareTheSolution() {
-        console.log('서은이, 사랑해~~~');
-        console.log('solutionContent:', args);
-        return "no solution content yet";
-    },
-    cleanUp() {
-        console.log('자, 그럼 어떤 결과가 있었는지 함 볼까?');
-        console.log('finalSteps:', args);
-        return "no result to see yet";
-    }
-};
-
-//console.log("\nworkerFunctions:", workerFunctions);
-
-
-
-
-console.log('setup complete');
+const loadSnowflakeData = require('./snowflake/');
+const loadTeradataData = require('./teradata/');
+const { Console } = require('console');
 
 async function asyncMain() {
-    let connMariaDb, connTeradataDb, connSnowflakeDb;
+
     try {
         //read the file
         let table_names = (await fs.readFile("./resources/table_list_DE877.csv", "utf-8")).split(/\r?\n/).slice(1);
-        // console.log('table_names:', table_names);
+        console.log('table_names:', table_names.length);
 
-        let tableSQL = "";
-        for (let i = 0; i < table_names.length; i++) {
-            tableSQL += "'" + table_names[i] + "'";
-            if (i + 1 < table_names.length) {
-                tableSQL += ",";
+        let snowflakeColumnsFromTableNames, teradataColumnsFromTableNames;
+        let csvSchema = [
+            { id: 'TABLE_SCHEMA', title: 'ContainerName' },
+            { id: 'TABLE_NAME', title: 'TableName' },
+            { id: 'COLUMN_NAME', title: 'ColumnName' },
+            { id: 'DATA_TYPE', title: 'ColumnType' }
+        ];
+
+        //check if SF file-cache exists locally
+        let sfFileName = './sf_data.csv';
+        try {
+            if (fs2.existsSync(sfFileName)) {
+                //use the file
+                if (!snowflakeColumnsFromTableNames) {
+                    snowflakeColumnsFromTableNames = [];
+                }
+                fs2.createReadStream(sfFileName)
+                    .pipe(csv())
+                    .on('data', (row) => {
+                        snowflakeColumnsFromTableNames.push(row);
+                    }).on('end', () => {
+                        console.log(sfFileName, 'successfully read-in:', snowflakeColumnsFromTableNames.length);
+                    })
+            } else {
+                //get data
+                snowflakeColumnsFromTableNames = await loadSnowflakeData(table_names);
+                console.log('sf record[0]:', snowflakeColumnsFromTableNames[0]);
+                //write the file
+                const writer = require('csv-writer').createObjectCsvWriter({
+                        path: sfFileName,
+                        header: csvSchema
+                    }).writeRecords(snowflakeColumnsFromTableNames)
+                    .then(() => console.log(sfFileName, 'written successfully'));
             }
+
+            console.log('sf records count:', snowflakeColumnsFromTableNames.length);
+        } catch (err) {
+            console.log('sfFile check error:', err.message);
         }
 
-        let dataTypesToSample = [{
-            dataType: 'char',
-            teradata: [''],
-            snowflake: ['']
-        }, {
-            dataType: 'number',
-            teradata: [''],
-            snowflake: ['']
-        }, {
-            dataType: 'date',
-            teradata: [''],
-            snowflake: ['']
-        }, {
-            dataType: '',
-            teradata: [''],
-            snowflake: ['']
-        }];
+
+        console.log('SF column results:', snowflakeColumnsFromTableNames.length);
+
+        //load Teradata Data for the table-names
+        // let teradataColumnsFromTableNames1of4 = await loadTeradataData(table_names.slice(0, 4));
+        // console.log('TD column results:', teradataColumnsFromTableNames1of4.length);
+
+        // let dataTypesToSample = [{
+        //     dataType: 'char',
+        //     teradata: [''],
+        //     snowflake: ['']
+        // }, {
+        //     dataType: 'number',
+        //     teradata: [''],
+        //     snowflake: ['']
+        // }, {
+        //     dataType: 'date',
+        //     teradata: [''],
+        //     snowflake: ['']
+        // }, {
+        //     dataType: 'timestamp_ntz',
+        //     teradata: [''],
+        //     snowflake: ['']
+        // }];
+
+        // -- UPDATE for Snowflake SQL generation --  
+        // wholesale (Garpac) USA tables - Siva said TD-SF comparison requires
+        // additional filtering in Snowflake where company_code = 1 
+        // effectively limiting testing/validation scope 
+        // for Wholesale to Company Code 1 data only
+        // acceptable :)
 
         // MariaDB 
         /*
-        // const pool = workerFunctions.welcome(options.mariaDbConnectionConfigurations, "mariaDb");
+        // const pool = workerFunctions.connectionSetup(options.mariaDbConnectionConfigurations, "mariaDb");
         // connMariaDb = await pool.getConnection();
         // let mariaDbSchemaQueryTables = `SELECT table_schema as \`DB\`, table_name AS \`Table\`, 
         // ROUND(((data_length + index_length) / 1024 / 1024), 2) \`Size (MB)\` 
@@ -142,81 +105,13 @@ async function asyncMain() {
         //console.log(res); // { affectedRows: 1, insertId: 1, warningStatus: 0 }
         */
 
-        // const teradataConnection = workerFunctions.welcome(options.TeradataDbConnectionConfigurations, "teradataDb");
-
-        connSnowflakeDb = workerFunctions.welcome(options.snowflakeDbConnectionConfigurations, "snowflakeDb");
-
-        let snowflakeDbSchemaQueryString = "SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME IN (" + tableSQL + ");";
-        // let teradataDbSchemaQueryTables = "SELECT DatabaseName, TableName, ColumnName, ColumnFormat FROM DBC.ColumnsV WHERE tableName IN (" + tableSQL + ")";
-
-        // console.log('sf connection (pre-connect):', connSnowflakeDb.getId());
-
-        // console.log('\n\n-----------\nquery including all tables from list:', teradataDbSchemaQueryTables);
-
-        console.log('running query\n\n-----------\n');
-
-        let executeResult = connSnowflakeDb.execute({
-            sqlText: "select 1",
-            complete: function(err, stmt, rows) {
-                if (err) {
-                    console.log('executionSF failure:', err);
-                } else {
-                    console.log('rowsSF.length:', rows ? rows.length : 'empty object');
-                }
-            }
-        });
-
-        // TERADATA (start)
-        /*
-        connTeradataDb = new TeradataConnection.TeradataConnection();
-        connTeradataDb.connect(options.TeradataDbConnectionConfigurations);
-        let cursor = await connTeradataDb.cursor();
-        cursor.execute(teradataDbSchemaQueryTables);
-        console.log('execute sent to TD cursor');
-        const tdTablesMatchingTableList = cursor.fetchmany(9);
-
-        console.log('results:', tdTablesMatchingTableList.length);
-        if (tdTablesMatchingTableList.length < 10) {
-            console.log('less than 10 results:\n');
-            tdTablesMatchingTableList.forEach(function(item) {
-                console.log('item:', item); // null returned for ColumnFormat in TD, use SF to drive column-selection logic, then identify equivalent in TD
-            });
-        }
-        cursor.close();
-        //console.log("teradata RESULTS:\n\n-----------\n", tdTablesMatchingTableList); //[ {val: 1}, meta: ... ]
-        */
-        // TERADATA end
-
-        // SNOWFLAKE (start)
-        connSnowflakeDb.connect(function(err, conn) {
-
-            console.log('inside-SFconnect\nerr:', err);
-            // console.log('conn:', conn);
-
-            if (err) {
-                console.log('Unable to connect:', err.message);
-                throw err;
-            } else {
-                console.log('connected to SF');
-                let connectionId = conn.getId();
-                console.log('connectionId (post-connect):', connectionId);
-            }
-        });
-        // SNOWFLAKE (end)
-
 
     } catch (err) {
         console.log("err:", err);
         throw err;
     } finally {
         console.log('done, cleanup initiating...');
-        if (connMariaDb) return connMariaDb.end();
-        if (connTeradataDb) return teradataConnection.close();
-        if (connSnowflakeDb) return connSnowflakeDb.destroy(function(err, conn) {
-            if (err) {
-                console.log('unable to disconnect: ', err.message);
-            }
-        })
+
     }
 }
 
