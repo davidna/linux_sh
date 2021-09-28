@@ -1,6 +1,7 @@
 const mariadb = require('mariadb');
 const TeradataConnection = require("teradata-nodejs-driver/teradata-connection");
 const fs = require("fs").promises;
+const _ = require("underscore");
 
 const { getSystemErrorMap } = require('util');
 // initialized
@@ -15,34 +16,21 @@ var options = {
     source3: {
 
     },
-    TeradataDbConnectionConfigurations: {
-        type: "teradata",
-        log: 0,
-        host: 'ripsaw.skechers.com',
-        user: 'expadmin',
-        password: 'scbltE!',
-        acquireTimeout: 10000,
-        connectionLimit: 5
-    },
-    mariaDbConnectionConfigurations: {
-        type: "mariadb",
-        host: "talend-mariadb-prod.chlnajphzxst.us-west-2.rds.amazonaws.com",
-        user: "svcdeprd",
-        password: "jSwAZi2Jjcra4VsPgmoLBMCypu3c8EtyoN9wKbyOg",
-        connectionLimit: 5
-    },
+    TeradataDbConnectionConfigurations: require("./teradata/"),
+    mariaDbConnectionConfigurations: require('./mariadb/'),
     snowflakeDbConnectionConfigurations: {
 
     },
-    DeltaLakeBronzeDbConnectionConfigurations: {
+    // DeltaLakeBronzeDbConnectionConfigurations: {
 
-    },
-    AproPOSDbConnectionConfigurations: {
+    // }
+    // ,
+    // AproPOSDbConnectionConfigurations: {
 
-    },
-    CompassDbConnectionConfiguration: {
+    // },
+    // CompassDbConnectionConfiguration: {
 
-    }
+    // }
 }
 
 let workerFunctions = {
@@ -64,9 +52,8 @@ let workerFunctions = {
                 break;
             case "teradataDb":
                 outputConnectionPool = new TeradataConnection.TeradataConnection();
-                // teradataConnection.connect(connParams);
-                // console.log("Connect Success");
-                // teradataConnection.close();
+                outputConnectionPool.connect(outputOptions.source2);
+                console.log("Connect Success");
                 break;
         }
 
@@ -93,21 +80,20 @@ let workerFunctions = {
 //console.log("\nworkerFunctions:", workerFunctions);
 
 
-const pool = workerFunctions.welcome(options.mariaDbConnectionConfigurations, "mariaDb");
+// const pool = workerFunctions.welcome(options.mariaDbConnectionConfigurations, "mariaDb");
 
 // const teradataConnection = workerFunctions.welcome(options.TeradataDbConnectionConfigurations, "teradataDb");
 
 console.log('setup complete');
 
 async function asyncFunction() {
-    let connMariaDb;
+    let connMariaDb, connTeradataDb;
     try {
         //read the file
         let table_names = (await fs.readFile("./resources/table_list_DE877.csv", "utf-8")).split(/\r?\n/).slice(1);
         console.log('table_names:', table_names);
 
         // connMariaDb = await pool.getConnection();
-        // connTeradataDb = await teradataConnection.connect(connParams);
 
         // let mariaDbSchemaQueryTables = `SELECT table_schema as \`DB\`, table_name AS \`Table\`, 
         // ROUND(((data_length + index_length) / 1024 / 1024), 2) \`Size (MB)\` 
@@ -116,16 +102,49 @@ async function asyncFunction() {
         // `;
 
         // const rows = await connMariaDb.query(mariaDbSchemaQueryTables);
-        // console.log(rows); //[ {val: 1}, meta: ... ]
+
+        // console.log("mariaDb RESULTS:\n\n-----------\n", rows); //[ {val: 1}, meta: ... ]
         //const res = await conn.query("INSERT INTO myTable value (?, ?)", [1, "mariadb"]);
         //console.log(res); // { affectedRows: 1, insertId: 1, warningStatus: 0 }
 
+        // let tableSQL = _.forEach(table_names, function(item) {
+        //     return "'" + item + "',";
+        // });
+        let tableSQL = "";
+        for (let i = 0; i < table_names.length; i++) {
+            tableSQL += "'" + table_names[i] + "'";
+            if (i + 1 < table_names.length) {
+                tableSQL += ",";
+            }
+        }
+
+        let teradataDbSchemaQueryTables = "SELECT * FROM DBC.TABLES WHERE tableName IN (" + tableSQL + ");";
+
+        let dataTypesToSample = ['char', 'number', 'date', 'timestamp_ntz'];
+
+        console.log('\n\n-----------\nquery including all tables from list:', teradataDbSchemaQueryTables);
+
+        console.log('running query\n\n-----------\n');
+
+        var teradataConnection = new TeradataConnection.TeradataConnection();
+        teradataConnection.connect(options.TeradataDbConnectionConfigurations);
+        var cursor = await teradataConnection.cursor();
+        cursor.execute(teradataDbSchemaQueryTables);
+        console.log('execute sent to TD cursor');
+        const tdTablesMatchingTableList = cursor.fetchall();
+
+        console.log('results:', tdTablesMatchingTableList.length);
+        cursor.close();
+        //console.log("teradata RESULTS:\n\n-----------\n", tdTablesMatchingTableList); //[ {val: 1}, meta: ... ]
+
+
     } catch (err) {
+        console.log("err:", err);
         throw err;
     } finally {
         console.log('done, cleanup');
         if (connMariaDb) return connMariaDb.end();
-        // if (teradataConnection) return teradataConnection.close();
+        if (teradataConnection) return teradataConnection.close();
     }
 }
 
