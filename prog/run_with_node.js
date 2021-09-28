@@ -9,6 +9,51 @@ const loadSnowflakeData = require('./snowflake/');
 const loadTeradataData = require('./teradata/');
 const { Console } = require('console');
 
+async function findMatchByColumnName(columnName, matchCandidates) {
+    let matches = [];
+
+    for (var i = 0; i < matchCandidates.length; i++) {
+        if (matchCandidates[i].ColumnName == columnName) {
+            matches.push(matchCandidates[i]);
+            // console.log('match:', columnName, )
+        } else {
+            console.log('non-match:', columnName, ' != ', matchCandidates[i].ColumnName);
+        }
+    }
+
+    return matches;
+}
+
+async function generateSQLForAuditReferenceTable(sfColumns, tdColumns) {
+    console.log('td:', tdColumns[0]);
+    console.log('sf:', sfColumns[0]);
+    console.log('tdColumns.length:', tdColumns.length);
+    console.log('sfColumns.length:', sfColumns.length);
+
+    let distinctTableNames = [];
+    //iterate tables in tdColumns
+    for (var i = 0; i < sfColumns.length; i++) {
+        if (!distinctTableNames.indexOf(sfColumns[i].TableName)) {
+            distinctTableNames.push(sfColumns[i].TableName);
+        }
+    }
+
+    //iterate sfColumns
+    for (var i = 0; i < 1; i++) {
+        sf = sfColumns[i];
+        if (distinctTableNames.indexOf(sf.TableName)) {
+            let tdMatchByColumnName = findMatchByColumnName(sf.ColumnName, tdColumns);
+            if (tdMatchByColumnName && tdMatchByColumnName.length > 0) {
+                console.log(tdMatchByColumnName);
+                //for each match on the column name, generate SQL
+
+            } else {
+                // console.log('no match in tdColumns for: ', sf.ColumnName);
+            }
+        }
+    }
+}
+
 async function asyncMain() {
 
     try {
@@ -39,6 +84,8 @@ async function asyncMain() {
                     }).on('end', () => {
                         console.log(sfFileName, 'successfully read-in:', snowflakeColumnsFromTableNames.length);
                         console.log('sf record[0]:', snowflakeColumnsFromTableNames[0]);
+
+                        generateSQLForAuditReferenceTable(snowflakeColumnsFromTableNames, teradataColumnsFromTableNames);
                     })
             } else {
                 //get data
@@ -87,11 +134,6 @@ async function asyncMain() {
         } catch (err) {
             console.log('tdFile check error:', err.message);
         }
-
-
-        //load Teradata Data for the table-names
-        // let teradataColumnsFromTableNames1of4 = await loadTeradataData(table_names.slice(0, 4));
-        // console.log('TD column results:', teradataColumnsFromTableNames1of4.length);
 
         // let dataTypesToSample = [{
         //     dataType: 'char',
