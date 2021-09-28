@@ -38,26 +38,56 @@ async function asyncMain() {
                         snowflakeColumnsFromTableNames.push(row);
                     }).on('end', () => {
                         console.log(sfFileName, 'successfully read-in:', snowflakeColumnsFromTableNames.length);
+                        console.log('sf record[0]:', snowflakeColumnsFromTableNames[0]);
                     })
             } else {
                 //get data
                 snowflakeColumnsFromTableNames = await loadSnowflakeData(table_names);
+                console.log('SF column results:', snowflakeColumnsFromTableNames.length);
                 console.log('sf record[0]:', snowflakeColumnsFromTableNames[0]);
                 //write the file
                 const writer = require('csv-writer').createObjectCsvWriter({
                         path: sfFileName,
                         header: csvSchema
                     }).writeRecords(snowflakeColumnsFromTableNames)
-                    .then(() => console.log(sfFileName, 'written successfully'));
+                    .then(() => console.log(sfFileName, console.log('SF column results:', snowflakeColumnsFromTableNames.length, 'written successfully')));
             }
-
-            console.log('sf records count:', snowflakeColumnsFromTableNames.length);
         } catch (err) {
             console.log('sfFile check error:', err.message);
         }
 
+        //check if TD file-cache exists locally
+        let tdFileName = './td_data.csv';
+        try {
+            if (fs2.existsSync(tdFileName)) {
+                //use the file
+                if (!teradataColumnsFromTableNames) {
+                    teradataColumnsFromTableNames = [];
+                }
+                fs2.createReadStream(tdFileName)
+                    .pipe(csv())
+                    .on('data', (row) => {
+                        teradataColumnsFromTableNames.push(row);
+                    }).on('end', () => {
+                        console.log(tdFileName, 'successfully read-in:', teradataColumnsFromTableNames.length);
+                        console.log('td record[0]:', teradataColumnsFromTableNames[0]);
+                    })
+            } else {
+                //get data
+                teradataColumnsFromTableNames = await loadTeradataData(table_names.slice(0, 4));
+                console.log('TD column results:', teradataColumnsFromTableNames.length);
+                console.log('td record[0]:', teradataColumnsFromTableNames[0]);
+                //write the file
+                const writer = require('csv-writer').createObjectCsvWriter({
+                        path: tdFileName,
+                        header: csvSchema
+                    }).writeRecords(teradataColumnsFromTableNames)
+                    .then(() => console.log(tdFileName, console.log('TD column results:', teradataColumnsFromTableNames.length, 'written successfully')));
+            }
+        } catch (err) {
+            console.log('tdFile check error:', err.message);
+        }
 
-        console.log('SF column results:', snowflakeColumnsFromTableNames.length);
 
         //load Teradata Data for the table-names
         // let teradataColumnsFromTableNames1of4 = await loadTeradataData(table_names.slice(0, 4));
