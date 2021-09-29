@@ -13,15 +13,64 @@ async function findMatchByColumnName(columnName, matchCandidates) {
     let matches = [];
 
     for (var i = 0; i < matchCandidates.length; i++) {
-        if (matchCandidates[i].ColumnName == columnName) {
+        if (matchCandidates[i].ColumnName == columnName && matches.indexOf(columnName) < 0) {
             matches.push(matchCandidates[i]);
-            // console.log('match:', columnName, )
+            // console.log('match:', matchCandidates[i].TableName, '.', columnName);
         } else {
-            console.log('non-match:', columnName, ' != ', matchCandidates[i].ColumnName);
+            // console.log('non-match:', columnName, ' != ', matchCandidates[i].ColumnName);
         }
     }
 
+    if (matches.length > 0) console.log('matches:', matches.length);
+
     return matches;
+}
+
+async function getDistinctTableNames(columnsRecords) {
+    let result = [];
+
+    //iterate tables in tdColumns
+    for (var i = 0; i < columnsRecords.length; i++) {
+        // console.log(tdColumns[i]);
+        if (result.indexOf(columnsRecords[i].TableName) < 0) {
+            result.push(columnsRecords[i].TableName);
+            // console.log('pushed:', tdColumns[i]);
+        }
+    }
+
+    return result;
+}
+
+async function getAggregatesSQL(columnDefinition) {
+
+}
+
+async function getFullCountSQL(columnDefinition) {
+    let result = `insert into
+    skx_audit_reference (
+        group_id,
+        rec_description,
+        source1_table_name,
+        source2_table_name,
+        source3_table_name,
+        source1_property,
+        source2_property,
+        source3_property,
+        sql_return_type,
+        source1_sql,
+        source2_sql,
+        source3_sql,
+        processfrequency,
+        isrowenabled,
+        create_datetime,
+        create_user
+    )
+    values
+    (` + `
+        14,
+    'Full table count ` + columnDefinition.ContainerName;
+
+    return result;
 }
 
 async function generateSQLForAuditReferenceTable(sfColumns, tdColumns) {
@@ -30,23 +79,26 @@ async function generateSQLForAuditReferenceTable(sfColumns, tdColumns) {
     console.log('tdColumns.length:', tdColumns.length);
     console.log('sfColumns.length:', sfColumns.length);
 
-    let distinctTableNames = [];
-    //iterate tables in tdColumns
-    for (var i = 0; i < sfColumns.length; i++) {
-        if (!distinctTableNames.indexOf(sfColumns[i].TableName)) {
-            distinctTableNames.push(sfColumns[i].TableName);
-        }
-    }
+    let distinctTableNames = await getDistinctTableNames(tdColumns);
 
+    console.log('distinctTableNames (td):', distinctTableNames);
+
+    let result = [];
     //iterate sfColumns
-    for (var i = 0; i < 1; i++) {
+    for (var i = 0; i < sfColumns.length; i++) {
         sf = sfColumns[i];
-        if (distinctTableNames.indexOf(sf.TableName)) {
-            let tdMatchByColumnName = findMatchByColumnName(sf.ColumnName, tdColumns);
+        // console.log('sf:', sf.TableName);
+        if (distinctTableNames.indexOf(sf.TableName >= 0)) {
+            let tdMatchByColumnName = await findMatchByColumnName(sf.ColumnName, tdColumns);
+
             if (tdMatchByColumnName && tdMatchByColumnName.length > 0) {
                 console.log(tdMatchByColumnName);
                 //for each match on the column name, generate SQL
 
+                // N.B. hard-code array of Garpac instances, to utilize in rec_description
+
+                let sqlOutputForCount = getFullCountSQL(tdMatchByColumnName);
+                let sqlOutputForAggregate = getAggregatesSQL(tdMatchByColumnName);
             } else {
                 // console.log('no match in tdColumns for: ', sf.ColumnName);
             }
@@ -58,8 +110,8 @@ async function asyncMain() {
 
     try {
         //read the file
-        let table_names = (await fs.readFile("./resources/table_list_DE877.csv", "utf-8")).split(/\r?\n/).slice(1);
-        console.log('table_names:', table_names.length);
+        let tables_serverInstances = (await fs.readFile("./resources/table_serverInstance_list_DE877.csv", "utf-8")).split(/\r?\n/).slice(1);
+        console.log('tables_serverInstances:', tables_serverInstances.length);
 
         let snowflakeColumnsFromTableNames, teradataColumnsFromTableNames;
         let csvSchema = [
@@ -89,7 +141,7 @@ async function asyncMain() {
                     })
             } else {
                 //get data
-                snowflakeColumnsFromTableNames = await loadSnowflakeData(table_names);
+                snowflakeColumnsFromTableNames = await loadSnowflakeData(tables_serverInstances);
                 console.log('SF column results:', snowflakeColumnsFromTableNames.length);
                 console.log('sf record[0]:', snowflakeColumnsFromTableNames[0]);
                 //write the file
@@ -116,12 +168,12 @@ async function asyncMain() {
                     .on('data', (row) => {
                         teradataColumnsFromTableNames.push(row);
                     }).on('end', () => {
-                        console.log(tdFileName, 'successfully read-in:', teradataColumnsFromTableNames.length);
-                        console.log('td record[0]:', teradataColumnsFromTableNames[0]);
+                        // console.log(tdFileName, 'successfully read-in:', teradataColumnsFromTableNames.length);
+                        // console.log('td record[0]:', teradataColumnsFromTableNames[0]);
                     })
             } else {
                 //get data
-                teradataColumnsFromTableNames = await loadTeradataData(table_names.slice(0, 4));
+                teradataColumnsFromTableNames = await loadTeradataData(tables_serverInstances.slice(0, 4));
                 console.log('TD column results:', teradataColumnsFromTableNames.length);
                 console.log('td record[0]:', teradataColumnsFromTableNames[0]);
                 //write the file
