@@ -24,7 +24,7 @@ async function loadData(tableNames) {
         const item = cursor.fetchone();
         if (!displayedIt) {
             console.log(i, item);
-            console.log('table-schema:', item[0]);
+            console.log('TD table-schema:', item[0]);
             displayedIt = !displayedIt;
         }
         return {
@@ -35,7 +35,7 @@ async function loadData(tableNames) {
         }
     });
 
-    console.log('results.length:', results.length);
+    // console.log('results.length:', results.length);
 
     cursor.close();
     connTeradataDb.close();

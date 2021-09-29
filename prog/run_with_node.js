@@ -4,10 +4,12 @@ const mariadb = require('mariadb');
 const fs = require("fs").promises;
 const fs2 = require('fs');
 const csv = require('csv-parser');
+const csvToJson = require('csvtojson');
+const _ = require('underscore');
 
 const loadSnowflakeData = require('./snowflake/');
 const loadTeradataData = require('./teradata/');
-const { Console } = require('console');
+const { Console, table } = require('console');
 
 async function findMatchByColumnName(columnName, matchCandidates) {
     let matches = [];
@@ -106,13 +108,44 @@ async function generateSQLForAuditReferenceTable(sfColumns, tdColumns) {
     }
 }
 
+async function getTableNamesNotInFirstList(list_1, list_2) {
+    return _.difference(list_2, list_1);
+}
+
+async function mergeUniqueTableNamesFromEachList(list1, list2) {
+    return _.union(list1, list2);
+}
+
 async function asyncMain() {
 
-    try {
-        //read the file
-        let tables_serverInstances = (await fs.readFile("./resources/table_serverInstance_list_DE877.csv", "utf-8")).split(/\r?\n/).slice(1);
-        console.log('tables_serverInstances:', tables_serverInstances.length);
+    const loadData = true;
 
+    try {
+        //read the files for list of tables and other pertinent info
+        let table_names = (await fs.readFile("./resources/table_list_DE877.csv", "utf-8")).split(/\r?\n/).slice(1);
+        console.log('table_names (from DE-877 comment):', table_names.length);
+
+        let wholesale_table_list_2_objects = await csvToJson()
+            .fromFile("./resources/wholesale_tables_src_tgt.csv");
+        console.log('wholesale_table_list_2_objects:', wholesale_table_list_2_objects.length);
+
+        //compare the two lists by the pre-identified field [target_class_name] in the second csv->json
+        let tableNames_list_2 = _.map(wholesale_table_list_2_objects, function(item) {
+            return item.target_class_name.substring(item.target_class_name.indexOf('DW_RIPSAW.') + 10);
+        });
+
+        let tableNamesNotInFirstList = await getTableNamesNotInFirstList(table_names, tableNames_list_2);
+        console.log('tableNamesNotInFirstList:', tableNamesNotInFirstList.length);
+
+        let tableNamesNotInSecondList = await getTableNamesNotInFirstList(tableNames_list_2, table_names);
+        console.log('tableNamesNotInSecondList:', tableNamesNotInSecondList.length);
+
+        let uniqueTableNamesAcrossBothList = await mergeUniqueTableNamesFromEachList(table_names, tableNames_list_2);
+
+        console.log('unique table-name count:', uniqueTableNamesAcrossBothList.length);
+        console.log('list 2 table-name count:', tableNames_list_2.length);
+
+        //prep the work.
         let snowflakeColumnsFromTableNames, teradataColumnsFromTableNames;
         let csvSchema = [
             { id: 'TABLE_SCHEMA', title: 'ContainerName' },
@@ -121,71 +154,77 @@ async function asyncMain() {
             { id: 'DATA_TYPE', title: 'ColumnType' }
         ];
 
-        //check if SF file-cache exists locally
-        let sfFileName = './sf_data.csv';
-        try {
-            if (fs2.existsSync(sfFileName)) {
-                //use the file
-                if (!snowflakeColumnsFromTableNames) {
-                    snowflakeColumnsFromTableNames = [];
-                }
-                fs2.createReadStream(sfFileName)
-                    .pipe(csv())
-                    .on('data', (row) => {
-                        snowflakeColumnsFromTableNames.push(row);
-                    }).on('end', () => {
-                        console.log(sfFileName, 'successfully read-in:', snowflakeColumnsFromTableNames.length);
-                        console.log('sf record[0]:', snowflakeColumnsFromTableNames[0]);
+        if (loadData) {
+            //check if SF file-cache exists locally
+            let sfFileName = './sf_data.csv';
+            try {
+                if (fs2.existsSync(sfFileName)) {
+                    //use the file
+                    if (!snowflakeColumnsFromTableNames) {
+                        snowflakeColumnsFromTableNames = [];
+                    }
+                    fs2.createReadStream(sfFileName)
+                        .pipe(csv())
+                        .on('data', (row) => {
+                            snowflakeColumnsFromTableNames.push(row);
+                        }).on('end', () => {
+                            console.log(sfFileName, 'successfully read-in:', snowflakeColumnsFromTableNames.length);
+                            console.log('sf record[0]:', snowflakeColumnsFromTableNames[0]);
 
-                        generateSQLForAuditReferenceTable(snowflakeColumnsFromTableNames, teradataColumnsFromTableNames);
-                    })
-            } else {
-                //get data
-                snowflakeColumnsFromTableNames = await loadSnowflakeData(tables_serverInstances);
-                console.log('SF column results:', snowflakeColumnsFromTableNames.length);
-                console.log('sf record[0]:', snowflakeColumnsFromTableNames[0]);
-                //write the file
-                const writer = require('csv-writer').createObjectCsvWriter({
-                        path: sfFileName,
-                        header: csvSchema
-                    }).writeRecords(snowflakeColumnsFromTableNames)
-                    .then(() => console.log(sfFileName, console.log('SF column results:', snowflakeColumnsFromTableNames.length, 'written successfully')));
+                            generateSQLForAuditReferenceTable(snowflakeColumnsFromTableNames, teradataColumnsFromTableNames);
+                        })
+                } else {
+                    //get data
+                    snowflakeColumnsFromTableNames = await loadSnowflakeData(uniqueTableNamesAcrossBothList);
+                    console.log('SF column results:', snowflakeColumnsFromTableNames.length);
+                    console.log('sf record[0]:', snowflakeColumnsFromTableNames[0]);
+                    //write the file
+                    const writer = require('csv-writer').createObjectCsvWriter({
+                            path: sfFileName,
+                            header: csvSchema
+                        }).writeRecords(snowflakeColumnsFromTableNames)
+                        .then(() => console.log(sfFileName, console.log('SF column results:', snowflakeColumnsFromTableNames.length, 'written successfully')));
+                }
+            } catch (err) {
+                console.log('sfFile check error:', err.message);
             }
-        } catch (err) {
-            console.log('sfFile check error:', err.message);
+
+            //check if TD file-cache exists locally
+            let tdFileName = './td_data.csv';
+            try {
+                if (fs2.existsSync(tdFileName)) {
+                    //use the file
+                    if (!teradataColumnsFromTableNames) {
+                        teradataColumnsFromTableNames = [];
+                    }
+                    fs2.createReadStream(tdFileName)
+                        .pipe(csv())
+                        .on('data', (row) => {
+                            teradataColumnsFromTableNames.push(row);
+                        }).on('end', () => {
+                            console.log(tdFileName, 'successfully read-in:', teradataColumnsFromTableNames.length);
+
+                            // if (moreTDColumInfoToGet(teradataColumnsFromTableNames)) {
+                            //     //get more tables' column metadata
+                            // }
+                        })
+                } else {
+                    //get data for the first time, from TD - for 5 tables
+                    teradataColumnsFromTableNames = await loadTeradataData(uniqueTableNamesAcrossBothList.slice(0, 4));
+                    console.log('TD column results:', teradataColumnsFromTableNames.length);
+                    console.log('td record[0]:', teradataColumnsFromTableNames[0]);
+                    //write the file
+                    const writer = require('csv-writer').createObjectCsvWriter({
+                            path: tdFileName,
+                            header: csvSchema
+                        }).writeRecords(teradataColumnsFromTableNames)
+                        .then(() => console.log(tdFileName, console.log('TD column results:', teradataColumnsFromTableNames.length, 'written successfully')));
+                }
+            } catch (err) {
+                console.log('tdFile check error:', err.message);
+            }
         }
 
-        //check if TD file-cache exists locally
-        let tdFileName = './td_data.csv';
-        try {
-            if (fs2.existsSync(tdFileName)) {
-                //use the file
-                if (!teradataColumnsFromTableNames) {
-                    teradataColumnsFromTableNames = [];
-                }
-                fs2.createReadStream(tdFileName)
-                    .pipe(csv())
-                    .on('data', (row) => {
-                        teradataColumnsFromTableNames.push(row);
-                    }).on('end', () => {
-                        // console.log(tdFileName, 'successfully read-in:', teradataColumnsFromTableNames.length);
-                        // console.log('td record[0]:', teradataColumnsFromTableNames[0]);
-                    })
-            } else {
-                //get data
-                teradataColumnsFromTableNames = await loadTeradataData(tables_serverInstances.slice(0, 4));
-                console.log('TD column results:', teradataColumnsFromTableNames.length);
-                console.log('td record[0]:', teradataColumnsFromTableNames[0]);
-                //write the file
-                const writer = require('csv-writer').createObjectCsvWriter({
-                        path: tdFileName,
-                        header: csvSchema
-                    }).writeRecords(teradataColumnsFromTableNames)
-                    .then(() => console.log(tdFileName, console.log('TD column results:', teradataColumnsFromTableNames.length, 'written successfully')));
-            }
-        } catch (err) {
-            console.log('tdFile check error:', err.message);
-        }
 
         // let dataTypesToSample = [{
         //     dataType: 'char',
